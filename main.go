@@ -1,23 +1,72 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 )
 
-func main() {
-	if len(os.Args) == 1 {
-		fmt.Println("Usage: you need to provide words to classify them and redirect them to the appropriate stream")
-		os.Exit(1)
+type CliConfig struct {
+	OutputWriter io.Writer
+	ErrorWriter  io.Writer
+}
+
+func NewCliConfig(opts ...Option) (*CliConfig, error) {
+	c := CliConfig{
+		OutputWriter: os.Stdout,
+		ErrorWriter:  os.Stderr,
 	}
 
-	for _, w := range os.Args[1:] {
+	for _, opt := range opts {
+		err := opt(&c)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &c, nil
+}
+
+type Option func(*CliConfig) error
+
+func CliConfigWithOutputWriter(w io.Writer) Option {
+	return func(c *CliConfig) error {
+		c.OutputWriter = w
+		return nil
+	}
+}
+
+func CliConfigWithErrorWriter(w io.Writer) Option {
+	return func(c *CliConfig) error {
+		c.ErrorWriter = w
+		return nil
+	}
+}
+
+func (c *CliConfig) PrintArgs(args []string) error {
+	if len(args) == 0 {
+		return errors.New("no arguments specified")
+	}
+
+	for _, w := range args {
 		if len(w)%2 == 0 {
 			// this is even therefore transfer this into the standard output
-			_, _ = fmt.Fprintln(os.Stdout, w)
+			_, _ = fmt.Fprintln(c.OutputWriter, w)
 		} else {
 			// this has odd number of letters, then transfer it to standard error
-			_, _ = fmt.Fprintln(os.Stderr, w)
+			_, _ = fmt.Fprintln(c.ErrorWriter, w)
 		}
+	}
+	return nil
+}
+
+func main() {
+	c, err := NewCliConfig(CliConfigWithOutputWriter(os.Stdout), CliConfigWithErrorWriter(os.Stderr))
+	if err != nil {
+		panic(err)
+	}
+
+	if err := c.PrintArgs(os.Args[1:]); err != nil {
+		panic(err)
 	}
 }
